@@ -1,0 +1,11 @@
+{
+  "extends": "@tsconfig/node24/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "build",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "declarationMap": true,
+    "declaration": true,
+    "isolatedModules": true
+  }
+}
