@@ -11,33 +11,84 @@ Based on reverse-engineering from [ReneNulschDE/mbapi2020](https://github.com/Re
 yarn add @jakobgoerke/mercedes-benz-client
 ```
 
-## Usage
+## Authentication
+
+Authentication uses the CIAM/PKCE password flow — the same flow as the Mercedes Me mobile app.
+
+### First-time login (local)
+
+```sh
+yarn login
+```
+
+This prompts for your Mercedes Me email and password, then writes `auth.json` containing your `deviceId` and `refreshToken`. Keep the `deviceId` stable — Mercedes binds refresh tokens to the device that issued them.
+
+### Using saved credentials
 
 ```ts
 import { MercedesBenzClient, VehicleEventStream } from '@jakobgoerke/mercedes-benz-client';
 
-const client = new MercedesBenzClient({ deviceId: 'persist-this' });
+const client = new MercedesBenzClient({
+  deviceId: process.env.MERCEDES_DEVICE_ID,
+  token: {
+    accessToken: '',
+    refreshToken: process.env.MERCEDES_REFRESH_TOKEN!,
+    expiresAt: 0, // forces immediate refresh on first use
+  },
+});
+```
 
-// Step 1 — Mercedes emails a 6-digit PIN.
-const challenge = await client.requestLoginPin('me@example.com');
+The client automatically refreshes the access token before it expires. You only need `deviceId` and `refreshToken` long-term.
 
-// Step 2 — exchange PIN for tokens.
-const token = await client.completeLogin(challenge, '123456');
-// persist `token` (accessToken + refreshToken + expiresAt) somewhere.
+## Usage
 
-// List vehicles.
-const vehicles = await client.getVehicles();
+### Stream live updates
 
-// Stream live updates.
+```ts
 const stream = new VehicleEventStream(client);
+
+stream.on('connected', () => console.log('connected'));
+stream.on('assignedVehicles', (vins) => console.log('vehicles:', vins));
+
 stream.on('position', (vin, pos) => {
-  console.log(vin, pos.latitude, pos.longitude);
+  console.log(vin, pos.latitude, pos.longitude, pos.heading);
 });
+
 stream.on('update', (update) => {
-  // update.attributes contains everything the app sees — fuel, soc, doors, etc.
+  // update.attributes — all vehicle state the app sees (fuel, soc, doors, …)
+  // update.fullUpdate — true on the initial state dump after connect
 });
+
 await stream.connect();
 ```
+
+The stream auto-reconnects on disconnect. Call `stream.close()` to stop.
+
+### List vehicles
+
+```ts
+const vehicles = await client.getVehicles();
+// [{ vin, fin, licensePlate, model, modelYear }]
+```
+
+### Manual token refresh
+
+```ts
+const token = await client.refresh();
+// persist token.refreshToken if you want to update stored credentials
+```
+
+## Kubernetes
+
+Put `deviceId` and `refreshToken` from `auth.json` into a secret:
+
+```sh
+kubectl create secret generic mercedes-benz-auth \
+  --from-literal=deviceId=<value> \
+  --from-literal=refreshToken=<value>
+```
+
+Refresh tokens stay valid indefinitely as long as the cluster uses them regularly (they reset on each use). Re-run `yarn login` only if the token is revoked (password change, 90+ days of inactivity).
 
 ## Development
 
