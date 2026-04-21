@@ -78,16 +78,6 @@ const token = await client.refresh();
 // persist token.refreshToken if you want to update stored credentials
 ```
 
-## Kubernetes
-
-Put `deviceId` and `refreshToken` from `auth.json` into a secret:
-
-```sh
-kubectl create secret generic mercedes-benz-auth \
-  --from-literal=deviceId=<value> \
-  --from-literal=refreshToken=<value>
-```
-
 Refresh tokens stay valid indefinitely as long as the cluster uses them regularly (they reset on each use). Re-run `yarn login` only if the token is revoked (password change, 90+ days of inactivity).
 
 ## Development
