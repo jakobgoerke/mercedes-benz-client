@@ -71,17 +71,18 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
 
     const ws = new WebSocket(WS_URL, {
       headers: {
-        Authorization: `Bearer ${token.accessToken}`,
+        Authorization: token.accessToken,
         'APP-SESSION-ID': sessionId,
+        'OUTPUT-FORMAT': 'PROTO',
         'X-SessionId': sessionId,
         'X-TrackingId': randomUUID(),
+        'X-Locale': 'de-DE',
         'User-Agent': USER_AGENT,
         'X-ApplicationName': APPLICATION_NAME,
         'ris-application-version': APPLICATION_VERSION,
         'ris-sdk-version': SDK_VERSION,
         'ris-os-name': OS_NAME,
         'ris-os-version': OS_VERSION,
-        'Output-Format': 'PROTO',
       },
     });
     this.ws = ws;

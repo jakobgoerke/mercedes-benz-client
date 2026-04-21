@@ -13,6 +13,7 @@
   "dependencies": {
     "axios": "1.13.5",
     "protobufjs": "7.5.4",
+    "tough-cookie": "6.0.0",
     "ws": "8.18.3",
     "zod": "4.3.6"
   },
@@ -36,6 +37,7 @@
     "coverage": "jest --coverage",
     "lint": "biome check",
     "login": "ts-node scripts/login.ts",
+    "stream": "ts-node scripts/stream.ts",
     "gen:proto": "ts-node scripts/build-descriptors.ts"
   },
   "packageManager": "yarn@4.12.0",

@@ -9,7 +9,12 @@ export const SDK_VERSION = '4.4.2';
 export const OS_NAME = 'ios';
 export const OS_VERSION = '26.3';
 export const USER_AGENT = 'Mercedes-Benz/3044 CFNetwork/3860.400.22 Darwin/25.3.0';
-export const DEFAULT_COUNTRY_CODE = 'EN';
+/** UA string sent to the CIAM web login — matches what mbapi2020 uses. */
+export const CIAM_USER_AGENT =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.6 Mobile/15E148 Safari/604.1';
+
+export const OAUTH_REDIRECT_URI = 'rismycar://login-callback';
+export const OAUTH_SCOPE = 'email profile ciam-uid phone openid offline_access';
 
 /** Seconds before expiry at which the client proactively refreshes the access token. */
 export const TOKEN_REFRESH_SKEW_SECONDS = 60;

@@ -1,6 +1,6 @@
 /**
- * Interactive login. Drives the PIN email flow and writes `auth.json` containing
- * the credentials your cluster will need to stay logged in long-term.
+ * Interactive login. Drives the Mercedes Me CIAM/PKCE password flow and writes
+ * `auth.json` containing the credentials your cluster will need long-term.
  *
  * Run: `yarn login`
  *
@@ -11,15 +11,14 @@
  * Cluster handoff:
  *   The two fields that MUST make it into a k8s Secret are `deviceId` and
  *   `refreshToken`. `accessToken` will expire within an hour; `expiresAt` is
- *   informational. Reuse the same `deviceId` forever — Mercedes binds refresh
- *   tokens to the device that issued them, so regenerating the UUID means a
- *   forced re-login.
+ *   informational. Reuse the same `deviceId` forever — MB binds refresh
+ *   tokens to the device that issued them.
  */
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import readline from 'node:readline/promises';
 
 import { MercedesBenzClient } from '../src';
 
@@ -36,28 +35,17 @@ interface SavedAuth {
 async function main() {
   const rl = readline.createInterface({ input, output });
 
-  // Reuse the device id from a previous login if one exists. Avoids spawning a
-  // new "device" on Mercedes' side every time you rerun this script.
   const existing = await readExisting();
   const deviceId = existing?.deviceId ?? randomUUID();
-  if (existing) {
-    console.log(`Reusing deviceId from existing auth.json: ${deviceId}`);
-  } else {
-    console.log(`Fresh deviceId: ${deviceId}`);
-  }
+  console.log(existing ? `Reusing deviceId from existing auth.json: ${deviceId}` : `Fresh deviceId: ${deviceId}`);
 
   const email = (await rl.question('Mercedes Me email: ')).trim();
-  const client = new MercedesBenzClient({ deviceId });
-
-  console.log('Requesting PIN...');
-  const challenge = await client.requestLoginPin(email);
-  console.log(`PIN sent to ${email}. Check your inbox.`);
-
-  const pin = (await rl.question('PIN: ')).trim();
+  const password = (await rl.question('Password (will be visible): ')).trim();
   rl.close();
 
-  console.log('Exchanging PIN for tokens...');
-  const token = await client.completeLogin(challenge, pin);
+  const client = new MercedesBenzClient({ deviceId });
+  console.log('Logging in...');
+  const token = await client.login(email, password);
 
   const saved: SavedAuth = {
     deviceId,
@@ -77,8 +65,7 @@ async function main() {
 
 async function readExisting(): Promise<SavedAuth | undefined> {
   try {
-    const raw = await fs.readFile(AUTH_FILE, 'utf8');
-    return JSON.parse(raw) as SavedAuth;
+    return JSON.parse(await fs.readFile(AUTH_FILE, 'utf8')) as SavedAuth;
   } catch {
     return undefined;
   }
