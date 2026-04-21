@@ -11,7 +11,7 @@
     "build/src/**"
   ],
   "dependencies": {
-    "axios": "1.13.5",
+    "axios": "1.15.2",
     "protobufjs": "7.5.4",
     "tough-cookie": "6.0.0",
     "ws": "8.18.3",
