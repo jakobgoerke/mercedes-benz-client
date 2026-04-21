@@ -14,7 +14,7 @@ import {
   WS_URL,
 } from './constants';
 import { MercedesBenzClient } from './MercedesBenzClient';
-import { ClientMessage, PushMessage, VEPUpdate } from './proto';
+import { ClientMessage, PushMessage } from './proto';
 import type { AttributeValue, Position, VehicleUpdate } from './types';
 
 /**
@@ -25,6 +25,9 @@ import type { AttributeValue, Position, VehicleUpdate } from './types';
 const POSITION_LAT_KEY = 'positionLat';
 const POSITION_LONG_KEY = 'positionLong';
 const POSITION_HEADING_KEY = 'positionHeading';
+
+const ACK_ASSIGNED_VEHICLES = Buffer.from('ba0100', 'hex');
+const ACK_PENDING_COMMAND = Buffer.from('aa0100', 'hex');
 
 export type VehicleEventStreamEvents = {
   connected: () => void;
@@ -139,7 +142,7 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
     if (msg.assigned_vehicles) {
       const vins: string[] = msg.assigned_vehicles.vins ?? [];
       this.emit('assignedVehicles', vins);
-      this.send(hexToBytes('ba0100'));
+      this.send(ACK_ASSIGNED_VEHICLES);
       return;
     }
 
@@ -172,7 +175,7 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
     }
 
     if (msg.apptwin_pending_command_request) {
-      this.send(hexToBytes('aa0100'));
+      this.send(ACK_PENDING_COMMAND);
       return;
     }
   }
@@ -226,20 +229,10 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
 function extractAttributeValue(status: any): AttributeValue {
   if (!status) return null;
   if (status.nil_value) return null;
-  if (status.double_value !== undefined && status.double_value !== 0) return status.double_value;
-  if (status.int_value !== undefined && status.int_value !== 0) return Number(status.int_value);
+  if (status.double_value !== undefined) return status.double_value;
+  if (status.int_value !== undefined) return Number(status.int_value);
   if (status.bool_value !== undefined) return Boolean(status.bool_value);
   if (status.string_value) return String(status.string_value);
-  if (status.double_value === 0) return 0;
-  if (status.int_value === 0) return 0;
   return null;
 }
 
-function hexToBytes(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
-  return out;
-}
-
-// Silence unused warning while keeping import for type references in future expansion.
-void VEPUpdate;

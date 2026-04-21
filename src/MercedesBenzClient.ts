@@ -63,17 +63,17 @@ export class MercedesBenzClient {
    * resulting tokens.
    */
   public async login(email: string, password: string): Promise<Token> {
-    const codeVerifier = base64UrlEncode(randomBytes(32));
-    const codeChallenge = base64UrlEncode(createHash('sha256').update(codeVerifier).digest());
+    const codeVerifier = randomBytes(32).toString('base64url');
+    const codeChallenge = createHash('sha256').update(codeVerifier).digest().toString('base64url');
 
     const authClient = makeJarClient(this.jar, { timeout: 10_000 });
 
     try {
-      const resumePath = await this.getAuthorizationResume(authClient, codeChallenge);
+      const resumePath = await this.getAuthorizationResume(codeChallenge);
       await this.sendUserAgentInfo(authClient);
       await this.submitUsername(authClient, email);
-      const preLogin = await this.submitPassword(authClient, email, password);
-      const code = await this.resumeAuthorization(authClient, resumePath, preLogin.token);
+      const preLoginToken = await this.submitPassword(authClient, email, password);
+      const code = await this.resumeAuthorization(authClient, resumePath, preLoginToken);
       const token = await this.exchangeCodeForTokens(authClient, code, codeVerifier);
       this.token = token;
       return token;
@@ -86,7 +86,7 @@ export class MercedesBenzClient {
     }
   }
 
-  private async getAuthorizationResume(_client: AxiosInstance, codeChallenge: string): Promise<string> {
+  private async getAuthorizationResume(codeChallenge: string): Promise<string> {
     // Must follow redirects manually so that Set-Cookie headers from every
     // intermediate hop are stored in the jar. axios collapses all redirects
     // into one response, losing intermediate cookies that PingFederate needs
@@ -158,8 +158,8 @@ export class MercedesBenzClient {
     if (res.status >= 400) throw new AuthenticationError(`username rejected [status=${res.status}]`);
   }
 
-  private async submitPassword(client: AxiosInstance, email: string, password: string): Promise<{ token: string; result: string }> {
-    const rid = base64UrlEncode(randomBytes(24));
+  private async submitPassword(client: AxiosInstance, email: string, password: string): Promise<string> {
+    const rid = randomBytes(24).toString('base64url');
     const res = await client.post(
       `${LOGIN_BASE_URL}/ciam/auth/login/pass`,
       { username: email, password, rememberMe: false, rid },
@@ -175,7 +175,7 @@ export class MercedesBenzClient {
     if (data.result !== 'RESUME2OIDCP' || !data.token) {
       throw new AuthenticationError(`unexpected login result: ${JSON.stringify(data)}`);
     }
-    return { token: data.token, result: data.result };
+    return data.token;
   }
 
   private async resumeAuthorization(client: AxiosInstance, resumePath: string, preLoginToken: string): Promise<string> {
@@ -186,7 +186,7 @@ export class MercedesBenzClient {
         headers: this.ciamHeaders({
           accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'content-type': 'application/x-www-form-urlencoded',
-        }),
+        } as Record<string, string>),
         maxRedirects: 0,
         validateStatus: (s) => s === 301 || s === 302,
       },
@@ -280,10 +280,6 @@ export class MercedesBenzClient {
       'Ris-Os-Version': OS_VERSION,
     };
   }
-}
-
-function base64UrlEncode(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /**
