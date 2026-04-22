@@ -11,6 +11,8 @@ import {
   USER_AGENT,
   WS_PING_INTERVAL_MS,
   WS_RECONNECT_DELAY_MS,
+  WS_RECONNECT_JITTER,
+  WS_RECONNECT_MAX_DELAY_MS,
   WS_URL,
 } from './constants';
 import { MercedesBenzClient } from './MercedesBenzClient';
@@ -28,6 +30,21 @@ const POSITION_HEADING_KEY = 'positionHeading';
 
 const ACK_ASSIGNED_VEHICLES = Buffer.from('ba0100', 'hex');
 const ACK_PENDING_COMMAND = Buffer.from('aa0100', 'hex');
+
+const WS_CLOSE_CODES: Record<number, string> = {
+  1000: 'normal closure',
+  1001: 'going away',
+  1002: 'protocol error',
+  1003: 'unsupported data',
+  1006: 'abnormal closure (no close frame)',
+  1007: 'invalid frame payload',
+  1008: 'policy violation',
+  1009: 'message too big',
+  1011: 'server error',
+  1012: 'service restart',
+  1013: 'try again later',
+  1014: 'bad gateway',
+};
 
 export type VehicleEventStreamEvents = {
   connected: () => void;
@@ -49,6 +66,7 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
   private pingTimer: NodeJS.Timeout | undefined;
   private reconnectTimer: NodeJS.Timeout | undefined;
   private closedByUser = false;
+  private reconnectAttempts = 0;
 
   constructor(private readonly client: MercedesBenzClient) {
     super();
@@ -56,6 +74,7 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
 
   public async connect(): Promise<void> {
     this.closedByUser = false;
+    this.reconnectAttempts = 0;
     await this.open();
   }
 
@@ -91,6 +110,7 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
     this.ws = ws;
 
     ws.on('open', () => {
+      this.reconnectAttempts = 0;
       this.emit('connected');
       this.startPing();
     });
@@ -105,30 +125,28 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
       }
       const msg = `WebSocket rejected: HTTP ${res.statusCode}${retryMs !== undefined ? ` — retry in ${Math.ceil(retryMs / 1000)}s` : ''}`;
       this.emit('error', new Error(msg));
-
       res.resume();
-      if (!this.closedByUser) {
-        const delay = retryMs !== undefined ? Math.max(retryMs, WS_RECONNECT_DELAY_MS) : WS_RECONNECT_DELAY_MS;
-        this.reconnectTimer = setTimeout(() => {
-          this.reconnectTimer = undefined;
-          this.open().catch((err) => this.emit('error', err as Error));
-        }, delay);
-      }
+      if (!this.closedByUser) this.scheduleReconnect(retryMs);
     });
     ws.on('close', (code, reason) => {
       this.clearPing();
-      const reasonStr = reason.length ? reason.toString() : `code=${code}`;
+      const reasonStr = reason.length ? `code=${code} reason=${reason.toString()}` : `code=${code} (${WS_CLOSE_CODES[code] ?? 'unknown'})`;
       this.emit('disconnected', reasonStr);
       if (!this.closedByUser) this.scheduleReconnect();
     });
   }
 
-  private scheduleReconnect(): void {
+  private scheduleReconnect(minDelayMs?: number): void {
     if (this.reconnectTimer) return;
+    const base = WS_RECONNECT_DELAY_MS * 2 ** this.reconnectAttempts;
+    const capped = Math.min(base, WS_RECONNECT_MAX_DELAY_MS);
+    const jittered = capped * (1 + WS_RECONNECT_JITTER * (Math.random() * 2 - 1));
+    const delay = Math.max(jittered, minDelayMs ?? 0);
+    this.reconnectAttempts++;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
       this.open().catch((err) => this.emit('error', err as Error));
-    }, WS_RECONNECT_DELAY_MS);
+    }, delay);
   }
 
   private startPing(): void {
