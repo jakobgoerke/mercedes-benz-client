@@ -96,6 +96,25 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
     });
     ws.on('message', (data) => this.handleMessage(data as Buffer));
     ws.on('error', (err) => this.emit('error', err));
+    ws.on('unexpected-response', (_req, res) => {
+      const retryAfter = res.headers['retry-after'];
+      let retryMs: number | undefined;
+      if (retryAfter) {
+        const seconds = Number(retryAfter);
+        retryMs = Number.isFinite(seconds) ? seconds * 1000 : new Date(retryAfter).getTime() - Date.now();
+      }
+      const msg = `WebSocket rejected: HTTP ${res.statusCode}${retryMs !== undefined ? ` — retry in ${Math.ceil(retryMs / 1000)}s` : ''}`;
+      this.emit('error', new Error(msg));
+
+      res.resume();
+      if (!this.closedByUser) {
+        const delay = retryMs !== undefined ? Math.max(retryMs, WS_RECONNECT_DELAY_MS) : WS_RECONNECT_DELAY_MS;
+        this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = undefined;
+          this.open().catch((err) => this.emit('error', err as Error));
+        }, delay);
+      }
+    });
     ws.on('close', (code, reason) => {
       this.clearPing();
       const reasonStr = reason.length ? reason.toString() : `code=${code}`;
@@ -235,4 +254,3 @@ function extractAttributeValue(status: any): AttributeValue {
   if (status.string_value) return String(status.string_value);
   return null;
 }
-
