@@ -25,6 +25,6 @@ export const WS_PING_INTERVAL_MS = 30_000;
 /** Milliseconds for the initial reconnect delay after a WebSocket close. */
 export const WS_RECONNECT_DELAY_MS = 15_000;
 /** Maximum reconnect backoff in milliseconds (caps exponential growth). */
-export const WS_RECONNECT_MAX_DELAY_MS = 5 * 60_000;
+export const WS_RECONNECT_MAX_DELAY_MS = 15 * 60_000;
 /** Jitter factor applied to reconnect delay (0–1). */
 export const WS_RECONNECT_JITTER = 0.2;
