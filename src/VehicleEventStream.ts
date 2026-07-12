@@ -265,10 +265,24 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
 // biome-ignore lint/suspicious/noExplicitAny: status is a decoded protobuf message
 function extractAttributeValue(status: any): AttributeValue {
   if (!status) return null;
-  if (status.nil_value) return null;
-  if (status.double_value !== undefined) return status.double_value;
-  if (status.int_value !== undefined) return Number(status.int_value);
-  if (status.bool_value !== undefined) return Boolean(status.bool_value);
-  if (status.string_value) return String(status.string_value);
-  return null;
+
+  // `attribute_type` is protobufjs' virtual discriminator for the
+  // `oneof attribute_type` — it names whichever of the 73 known value
+  // fields (int_value, bool_value, ..., park_collision_activation_status,
+  // temperature_points_value, ...) was actually sent on the wire.
+  const which: string | undefined = status.attribute_type;
+  if (!which || which === 'nil_value') return null;
+
+  const value = status[which];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'object') return value;
+
+  // int64 fields (e.g. int_value) decode to a Long-like object rather than
+  // a plain number.
+  if (typeof value.toNumber === 'function') return value.toNumber();
+  // The remaining oneof cases are nested messages (schedules, histograms,
+  // tariff tables, ...) — surface them as plain objects instead of
+  // silently discarding them.
+  if (typeof value.toJSON === 'function') return value.toJSON();
+  return value;
 }

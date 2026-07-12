@@ -5,7 +5,13 @@ export interface Position {
   timestamp: Date;
 }
 
-export type AttributeValue = number | string | boolean | null;
+/**
+ * Most VEP attributes decode to a scalar. A minority (~27 of the 73 known
+ * `attribute_type` oneof cases — schedules, histograms, tariff tables, etc.)
+ * carry a structured sub-message instead; those decode to a plain object
+ * rather than being dropped.
+ */
+export type AttributeValue = number | string | boolean | null | Record<string, unknown>;
 
 /** Typed map of all known VEP attribute keys (EU region, observed from live data). */
 export interface VehicleAttributes {
