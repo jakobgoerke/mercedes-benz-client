@@ -188,7 +188,7 @@ export class MercedesBenzClient {
       },
     );
     const location = res.headers.location;
-    if (!location || !location.startsWith('rismycar://')) {
+    if (!location?.startsWith('rismycar://')) {
       throw new AuthenticationError(`expected rismycar redirect, got: ${location}`);
     }
     const code = new URL(location).searchParams.get('code');
