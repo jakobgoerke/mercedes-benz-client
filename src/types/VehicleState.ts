@@ -51,13 +51,15 @@ export interface DoorAttributes {
   doorStatusOverall: number | null;
   decklidstatus: number | null;
   engineHoodStatus: number | null;
-  doorlockstatusfrontleft: number | null;
-  doorlockstatusfrontright: number | null;
-  doorlockstatusrearleft: number | null;
-  doorlockstatusrearright: number | null;
-  doorlockstatusdecklid: number | null;
+  /** true = unlocked, false = locked (per-door actuator state; observed from live data) */
+  doorlockstatusfrontleft: boolean | null;
+  doorlockstatusfrontright: boolean | null;
+  doorlockstatusrearleft: boolean | null;
+  doorlockstatusrearright: boolean | null;
+  doorlockstatusdecklid: boolean | null;
+  /** Aggregate lock state enum (0 = unlocked, 2 = locked observed; other values unconfirmed) */
   doorlockstatusvehicle: number | null;
-  doorlockstatusgas: number | null;
+  doorlockstatusgas: boolean | null;
 }
 
 export interface WindowAttributes {
