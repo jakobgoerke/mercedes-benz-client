@@ -23,11 +23,29 @@ yarn login
 
 This prompts for your Mercedes Me email and password, then writes `auth.json` containing your `deviceId` and `refreshToken`. Keep the `deviceId` stable — Mercedes binds refresh tokens to the device that issued them.
 
-### Using saved credentials
+### Long-running services: re-login with email + password
+
+Don't seed a long-lived process from a stored `refreshToken`. Mercedes rotates the refresh token on every use and revokes the previous one — if the process restarts after a rotation, the refresh token baked into your config/secret at deploy time is already dead and the service can never recover on its own.
+
+Instead, keep `deviceId` stable (see above) but call `login()` with the account email/password on startup **and** on an interval well inside a day:
 
 ```ts
 import { MercedesBenzClient, VehicleEventStream } from '@jakobgoerke/mercedes-benz-client';
 
+const client = new MercedesBenzClient({ deviceId: process.env.MERCEDES_DEVICE_ID });
+await client.login(process.env.MERCEDES_EMAIL!, process.env.MERCEDES_PASSWORD!);
+
+setInterval(
+  () => client.login(process.env.MERCEDES_EMAIL!, process.env.MERCEDES_PASSWORD!),
+  12 * 60 * 60 * 1000,
+);
+```
+
+Each `login()` call issues a brand-new token pair, so the in-memory refresh token is never more than a few hours old — a restart in between never trips over a rotated-out token. The client still auto-refreshes the access token between logins.
+
+### Using a saved refresh token (short-lived processes / scripts)
+
+```ts
 const client = new MercedesBenzClient({
   deviceId: process.env.MERCEDES_DEVICE_ID,
   token: {
@@ -38,7 +56,7 @@ const client = new MercedesBenzClient({
 });
 ```
 
-The client automatically refreshes the access token before it expires. You only need `deviceId` and `refreshToken` long-term.
+Fine for a one-shot script that exits shortly after use. Avoid it for anything that's expected to survive a restart days later.
 
 ## Usage
 
@@ -78,7 +96,7 @@ const token = await client.refresh();
 // persist token.refreshToken if you want to update stored credentials
 ```
 
-Refresh tokens stay valid indefinitely as long as the cluster uses them regularly (they reset on each use). Re-run `yarn login` only if the token is revoked (password change, 90+ days of inactivity).
+Useful for persisting a rotated refresh token back to storage if you're using the saved-refresh-token pattern above. For long-running services, prefer scheduled `login()` calls instead (see above) — they don't depend on the previous refresh token still being valid.
 
 ## Development
 
