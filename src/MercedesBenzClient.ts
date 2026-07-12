@@ -20,6 +20,9 @@ import {
 import { AuthenticationError } from './errors';
 import { type Token, TokenResponseSchema, type Vehicle, VehicleSchema } from './types';
 
+/** MB's CIAM web login expects a browser-style Accept header on GET requests for HTML resources. */
+const ACCEPT_HTML = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+
 export interface MercedesBenzClientOptions {
   /** Existing token from a previous login. Triggers a refresh on first request if expired. */
   token?: Token;
@@ -69,7 +72,7 @@ export class MercedesBenzClient {
     const authClient = makeJarClient(this.jar, { timeout: 10_000 });
 
     try {
-      const resumePath = await this.getAuthorizationResume(codeChallenge);
+      const resumePath = await this.getAuthorizationResume(authClient, codeChallenge);
       await this.sendUserAgentInfo(authClient);
       await this.submitUsername(authClient, email);
       const preLoginToken = await this.submitPassword(authClient, email, password);
@@ -86,11 +89,13 @@ export class MercedesBenzClient {
     }
   }
 
-  private async getAuthorizationResume(codeChallenge: string): Promise<string> {
-    // Must follow redirects manually so that Set-Cookie headers from every
-    // intermediate hop are stored in the jar. axios collapses all redirects
-    // into one response, losing intermediate cookies that PingFederate needs
-    // to see at the resume step.
+  private async getAuthorizationResume(client: AxiosInstance, codeChallenge: string): Promise<string> {
+    // Must follow redirects manually (rather than let axios do it) so that
+    // Set-Cookie headers from every intermediate hop are stored in the jar
+    // — axios collapses internally-followed redirects into one response,
+    // losing intermediate cookies that PingFederate needs to see at the
+    // resume step. `client`'s interceptors still do the actual jar
+    // get/set per request; we only control the redirect loop here.
     const params = new URLSearchParams({
       client_id: LOGIN_APP_ID,
       code_challenge: codeChallenge,
@@ -101,22 +106,13 @@ export class MercedesBenzClient {
     });
     const headers = {
       'user-agent': CIAM_USER_AGENT,
-      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      accept: ACCEPT_HTML,
       'accept-language': 'de-DE,de;q=0.9',
     };
 
     let url = `${LOGIN_BASE_URL}/as/authorization.oauth2?${params.toString()}`;
     for (let i = 0; i < 10; i++) {
-      const cookie = await this.jar.getCookieString(url);
-      const res = await axios.get(url, {
-        headers: { ...headers, ...(cookie ? { Cookie: cookie } : {}) },
-        maxRedirects: 0,
-        validateStatus: (s) => s < 400,
-      });
-      const setCookie = res.headers['set-cookie'];
-      if (Array.isArray(setCookie)) {
-        await Promise.all(setCookie.map((c) => this.jar.setCookie(c, url).catch(() => undefined)));
-      }
+      const res = await client.get(url, { headers, maxRedirects: 0, validateStatus: (s) => s < 400 });
       if (res.status === 301 || res.status === 302) {
         url = new URL(res.headers.location, url).toString();
         continue;
@@ -184,7 +180,7 @@ export class MercedesBenzClient {
       new URLSearchParams({ token: preLoginToken }).toString(),
       {
         headers: this.ciamHeaders({
-          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          accept: ACCEPT_HTML,
           'content-type': 'application/x-www-form-urlencoded',
         } as Record<string, string>),
         maxRedirects: 0,

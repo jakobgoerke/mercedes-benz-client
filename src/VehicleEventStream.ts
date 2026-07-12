@@ -16,7 +16,7 @@ import {
   WS_URL,
 } from './constants';
 import { MercedesBenzClient } from './MercedesBenzClient';
-import { ClientMessage, PushMessage } from './proto';
+import { ClientMessage, type DecodedAttributeStatus, type DecodedPushMessage, type DecodedVEPUpdate, PushMessage } from './proto';
 import type { AttributeValue, Position, VehicleUpdate } from './types';
 
 /**
@@ -27,9 +27,6 @@ import type { AttributeValue, Position, VehicleUpdate } from './types';
 const POSITION_LAT_KEY = 'positionLat';
 const POSITION_LONG_KEY = 'positionLong';
 const POSITION_HEADING_KEY = 'positionHeading';
-
-const ACK_ASSIGNED_VEHICLES = Buffer.from('ba0100', 'hex');
-const ACK_PENDING_COMMAND = Buffer.from('aa0100', 'hex');
 
 const WS_CLOSE_CODES: Record<number, string> = {
   1000: 'normal closure',
@@ -166,20 +163,21 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
   }
 
   private handleMessage(data: Buffer): void {
-    let push: ReturnType<typeof PushMessage.decode>;
+    let msg: DecodedPushMessage;
     try {
-      push = PushMessage.decode(data);
+      // protobufjs decodes against a schema loaded at runtime, so there's no
+      // generated type to decode into — this is the one place we assert the
+      // shape instead of deriving it from the type system.
+      msg = PushMessage.decode(data) as unknown as DecodedPushMessage;
     } catch (err) {
       this.emit('error', err as Error);
       return;
     }
-    // biome-ignore lint/suspicious/noExplicitAny: dynamic protobuf message
-    const msg = push as any;
 
     if (msg.assigned_vehicles) {
       const vins: string[] = msg.assigned_vehicles.vins ?? [];
       this.emit('assignedVehicles', vins);
-      this.send(ACK_ASSIGNED_VEHICLES);
+      this.sendAck('acknowledge_assigned_vehicles', {});
       return;
     }
 
@@ -212,13 +210,12 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
     }
 
     if (msg.apptwin_pending_command_request) {
-      this.send(ACK_PENDING_COMMAND);
+      this.sendAck('apptwin_pending_commands_response', {});
       return;
     }
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: vep is a decoded protobuf message
-  private emitVepUpdate(vin: string, vep: any): void {
+  private emitVepUpdate(vin: string, vep: DecodedVEPUpdate): void {
     const attributes: Record<string, AttributeValue> = {};
     for (const [key, status] of Object.entries(vep.attributes ?? {})) {
       attributes[key] = extractAttributeValue(status);
@@ -262,27 +259,26 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
   }
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: status is a decoded protobuf message
-function extractAttributeValue(status: any): AttributeValue {
+function extractAttributeValue(status: DecodedAttributeStatus | undefined): AttributeValue {
   if (!status) return null;
 
   // `attribute_type` is protobufjs' virtual discriminator for the
   // `oneof attribute_type` — it names whichever of the 73 known value
   // fields (int_value, bool_value, ..., park_collision_activation_status,
   // temperature_points_value, ...) was actually sent on the wire.
-  const which: string | undefined = status.attribute_type;
+  const which = status.attribute_type;
   if (!which || which === 'nil_value') return null;
 
   const value = status[which];
   if (value === null || value === undefined) return null;
-  if (typeof value !== 'object') return value;
+  if (typeof value !== 'object') return value as AttributeValue;
 
   // int64 fields (e.g. int_value) decode to a Long-like object rather than
-  // a plain number.
-  if (typeof value.toNumber === 'function') return value.toNumber();
-  // The remaining oneof cases are nested messages (schedules, histograms,
-  // tariff tables, ...) — surface them as plain objects instead of
-  // silently discarding them.
-  if (typeof value.toJSON === 'function') return value.toJSON();
-  return value;
+  // a plain number; the remaining oneof cases are nested messages
+  // (schedules, histograms, tariff tables, ...) with a `toJSON` — surface
+  // those as plain objects instead of silently discarding them.
+  const wrapped = value as { toNumber?: () => number; toJSON?: () => Record<string, unknown> };
+  if (typeof wrapped.toNumber === 'function') return wrapped.toNumber();
+  if (typeof wrapped.toJSON === 'function') return wrapped.toJSON();
+  return value as Record<string, unknown>;
 }

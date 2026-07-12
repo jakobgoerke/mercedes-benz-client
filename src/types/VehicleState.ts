@@ -13,9 +13,19 @@ export interface Position {
  */
 export type AttributeValue = number | string | boolean | null | Record<string, unknown>;
 
-/** Typed map of all known VEP attribute keys (EU region, observed from live data). */
-export interface VehicleAttributes {
-  // --- Position ---
+/**
+ * Field names below are copied verbatim from the VEP wire attribute keys
+ * (EU region, observed from live data) — casing is Mercedes' own and
+ * intentionally inconsistent (`doorstatusfrontleft` vs. `doorStatusOverall`).
+ * `VehicleEventStream` populates `VehicleUpdate.attributes` directly from
+ * those wire keys with no translation layer, so renaming a field here would
+ * desync the type from the runtime object it describes — don't.
+ *
+ * Split into one interface per VEP domain purely so each group is easy to
+ * scan; `VehicleAttributes` below composes them back into the single flat
+ * map that actually exists at runtime.
+ */
+export interface PositionAttributes {
   positionLat: number | null;
   positionLong: number | null;
   positionHeading: number | null;
@@ -23,14 +33,16 @@ export interface VehicleAttributes {
   /** 1 = proximity calculation required before showing position */
   proximityCalculationForVehiclePositionRequired: number | null;
   trackingStateHU: number | null;
+}
 
-  // --- Ignition / Drive ---
+export interface IgnitionAttributes {
   ignitionstate: number | null;
   parkbrakestatus: number | null;
   starterBatteryState: number | null;
   vtime: number | null;
+}
 
-  // --- Doors ---
+export interface DoorAttributes {
   doorstatusfrontleft: number | null;
   doorstatusfrontright: number | null;
   doorstatusrearleft: number | null;
@@ -46,8 +58,9 @@ export interface VehicleAttributes {
   doorlockstatusdecklid: number | null;
   doorlockstatusvehicle: number | null;
   doorlockstatusgas: number | null;
+}
 
-  // --- Windows ---
+export interface WindowAttributes {
   windowstatusfrontleft: number | null;
   windowstatusfrontright: number | null;
   windowstatusrearleft: number | null;
@@ -57,16 +70,18 @@ export interface VehicleAttributes {
   windowStatusRearLeftBlind: number | null;
   windowStatusRearRightBlind: number | null;
   flipWindowStatus: number | null;
+}
 
-  // --- Sunroof / Rooftop ---
+export interface SunroofAttributes {
   sunroofstatus: number | null;
   sunroofStatusFrontBlind: number | null;
   sunroofStatusRearBlind: number | null;
   sunroofEvent: number | null;
   sunroofEventActive: number | null;
   rooftopstatus: number | null;
+}
 
-  // --- Electric range & consumption ---
+export interface ElectricRangeAttributes {
   /** State of charge (%) */
   soc: number | null;
   maxSoc: number | null;
@@ -93,8 +108,9 @@ export interface VehicleAttributes {
   evRangeAssistDriveOnSOC: number | null;
   evRangeAssistDriveOnTime: number | null;
   hvBatteryThermalPropagationEvent: number | null;
+}
 
-  // --- Charging ---
+export interface ChargingAttributes {
   chargingactive: number | null;
   chargingstatus: number | null;
   chargingPower: number | null;
@@ -111,8 +127,10 @@ export interface VehicleAttributes {
   endofchargetime: number | null;
   endofChargeTimeWeekday: number | null;
   socprofile: number | null;
+}
 
-  // --- Fuel / combustion (null on BEV) ---
+/** Fuel / combustion attributes — null on BEVs. */
+export interface FuelAttributes {
   gasTankLevel: number | null;
   gasTankLevelPercent: number | null;
   gasTankRange: number | null;
@@ -129,8 +147,9 @@ export interface VehicleAttributes {
   distanceGasReset: number | null;
   filterParticleLoading: number | null;
   hybridWarnings: number | null;
+}
 
-  // --- Tires ---
+export interface TireAttributes {
   tirepressureFrontLeft: number | null;
   tirepressureFrontRight: number | null;
   tirepressureRearLeft: number | null;
@@ -150,8 +169,9 @@ export interface VehicleAttributes {
   tirewarningsprw: number | null;
   tireWarningLevelPrw: number | null;
   tireSensorAvailable: number | null;
+}
 
-  // --- Trip / odometer ---
+export interface TripAttributes {
   odo: number | null;
   distanceStart: number | null;
   distanceReset: number | null;
@@ -159,8 +179,9 @@ export interface VehicleAttributes {
   averageSpeedReset: number | null;
   drivenTimeStart: number | null;
   drivenTimeReset: number | null;
+}
 
-  // --- Preconditioning ---
+export interface PreconditioningAttributes {
   precondState: number | null;
   precondActive: number | null;
   precondNow: number | null;
@@ -174,35 +195,41 @@ export interface VehicleAttributes {
   precondSeatRearLeft: number | null;
   precondSeatRearRight: number | null;
   remoteStartTemperature: number | null;
+}
 
-  // --- Departure timers ---
+export interface DepartureTimerAttributes {
   departuretime: number | null;
   departuretimesoc: number | null;
   departureTimeMode: number | null;
   departureTimeWeekday: number | null;
   weeklySetHU: number | null;
   weeklyProfile: number | null;
+}
 
-  // --- Warnings ---
+export interface WarningAttributes {
   warningwashwater: number | null;
   warningbrakefluid: number | null;
   warningbrakeliningwear: number | null;
   warningcoolantlevellow: number | null;
   warningenginelight: number | null;
   vehicleHealthStatus: number | null;
+}
 
-  // --- Eco score ---
+export interface EcoScoreAttributes {
   ecoscoretotal: number | null;
   ecoscoreconst: number | null;
   ecoscoreaccel: number | null;
   ecoscorefreewhl: number | null;
   ecoscorebonusrange: number | null;
+}
 
-  // --- Service ---
+export interface ServiceAttributes {
   serviceintervaldays: number | null;
   serviceintervaldistance: number | null;
+}
 
-  // --- HU / system ---
+/** Head-unit / connectivity attributes. */
+export interface SystemAttributes {
   languageHU: number | null;
   timeFormatHU: number | null;
   temperatureUnitHU: number | null;
@@ -211,6 +238,24 @@ export interface VehicleAttributes {
   tcuConnectionStateLowChannel: number | null;
   vehicleDataConnectionState: number | null;
 }
+
+/** Typed map of all known VEP attribute keys, grouped by domain above. */
+export type VehicleAttributes = PositionAttributes &
+  IgnitionAttributes &
+  DoorAttributes &
+  WindowAttributes &
+  SunroofAttributes &
+  ElectricRangeAttributes &
+  ChargingAttributes &
+  FuelAttributes &
+  TireAttributes &
+  TripAttributes &
+  PreconditioningAttributes &
+  DepartureTimerAttributes &
+  WarningAttributes &
+  EcoScoreAttributes &
+  ServiceAttributes &
+  SystemAttributes;
 
 export interface VehicleUpdate {
   vin: string;
