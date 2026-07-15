@@ -23,6 +23,16 @@ import { type Token, TokenResponseSchema, type Vehicle, VehicleSchema } from './
 /** MB's CIAM web login expects a browser-style Accept header on GET requests for HTML resources. */
 const ACCEPT_HTML = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
 
+interface PreLoginData {
+  result?: string;
+  token?: string;
+  homeCountry?: string;
+  consentCountry?: string;
+  /** Present when MB offers a passkey setup prompt instead of proceeding with the password login. */
+  passkeyDemoEnabled?: boolean;
+  uid?: string;
+}
+
 export interface MercedesBenzClientOptions {
   /** Existing token from a previous login. Triggers a refresh on first request if expired. */
   token?: Token;
@@ -75,7 +85,14 @@ export class MercedesBenzClient {
       const resumePath = await this.getAuthorizationResume(authClient, codeChallenge);
       await this.sendUserAgentInfo(authClient);
       await this.submitUsername(authClient, email);
-      const preLoginToken = await this.submitPassword(authClient, email, password);
+      const rid = randomBytes(24).toString('base64url');
+      let preLoginData = await this.submitPassword(authClient, email, password, rid);
+      // MB now sometimes offers a passkey setup prompt instead of proceeding
+      // to RESUME2OIDCP. Decline it (same as the mobile app) to continue.
+      if (preLoginData.passkeyDemoEnabled) {
+        preLoginData = await this.disablePasskeyDemo(authClient, email, password, rid);
+      }
+      const preLoginToken = this.extractPreLoginToken(preLoginData);
       const code = await this.resumeAuthorization(authClient, resumePath, preLoginToken);
       const token = await this.exchangeCodeForTokens(authClient, code, codeVerifier);
       this.token = token;
@@ -83,7 +100,9 @@ export class MercedesBenzClient {
     } catch (err) {
       if (err instanceof AuthenticationError) throw err;
       if (isAxiosError(err)) {
-        throw new AuthenticationError(`login failed at ${err.config?.url}: status=${err.response?.status} body=${JSON.stringify(err.response?.data)}`);
+        throw new AuthenticationError(
+          `login failed at ${err.config?.url}: status=${err.response?.status} body=${JSON.stringify(err.response?.data)}`,
+        );
       }
       throw err;
     }
@@ -154,16 +173,28 @@ export class MercedesBenzClient {
     if (res.status >= 400) throw new AuthenticationError(`username rejected [status=${res.status}]`);
   }
 
-  private async submitPassword(client: AxiosInstance, email: string, password: string): Promise<string> {
-    const rid = randomBytes(24).toString('base64url');
+  private async submitPassword(client: AxiosInstance, email: string, password: string, rid: string): Promise<PreLoginData> {
     const res = await client.post(
       `${LOGIN_BASE_URL}/ciam/auth/login/pass`,
       { username: email, password, rememberMe: false, rid },
       { headers: this.ciamHeaders(), validateStatus: () => true },
     );
     if (res.status >= 400) throw new AuthenticationError(`password rejected [status=${res.status}]`);
+    return res.data as PreLoginData;
+  }
 
-    const data = res.data as { result?: string; token?: string; homeCountry?: string; consentCountry?: string };
+  /** Declines MB's passkey setup prompt (same request the mobile app sends) and continues the login flow. */
+  private async disablePasskeyDemo(client: AxiosInstance, email: string, password: string, rid: string): Promise<PreLoginData> {
+    const res = await client.post(
+      `${LOGIN_BASE_URL}/ciam/auth/disablePasskeyDemo`,
+      { username: email, password, rememberMe: false, rid, disablePasskeyDemo: true },
+      { headers: this.ciamHeaders(), validateStatus: () => true },
+    );
+    if (res.status >= 400) throw new AuthenticationError(`passkey prompt decline rejected [status=${res.status}]`);
+    return res.data as PreLoginData;
+  }
+
+  private extractPreLoginToken(data: PreLoginData): string {
     if (data.result === 'GOTO_LOGIN_OTP') throw new AuthenticationError('2FA required — not supported by this client');
     if (data.result === 'GOTO_LOGIN_LEGAL_TEXTS') {
       throw new AuthenticationError('legal consent required — accept in the MB app and retry');
@@ -175,18 +206,14 @@ export class MercedesBenzClient {
   }
 
   private async resumeAuthorization(client: AxiosInstance, resumePath: string, preLoginToken: string): Promise<string> {
-    const res = await client.post(
-      `${LOGIN_BASE_URL}${resumePath}`,
-      new URLSearchParams({ token: preLoginToken }).toString(),
-      {
-        headers: this.ciamHeaders({
-          accept: ACCEPT_HTML,
-          'content-type': 'application/x-www-form-urlencoded',
-        } as Record<string, string>),
-        maxRedirects: 0,
-        validateStatus: (s) => s === 301 || s === 302,
-      },
-    );
+    const res = await client.post(`${LOGIN_BASE_URL}${resumePath}`, new URLSearchParams({ token: preLoginToken }).toString(), {
+      headers: this.ciamHeaders({
+        accept: ACCEPT_HTML,
+        'content-type': 'application/x-www-form-urlencoded',
+      } as Record<string, string>),
+      maxRedirects: 0,
+      validateStatus: (s) => s === 301 || s === 302,
+    });
     const location = res.headers.location;
     if (!location?.startsWith('rismycar://')) {
       throw new AuthenticationError(`expected rismycar redirect, got: ${location}`);
