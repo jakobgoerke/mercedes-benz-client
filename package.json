@@ -1,6 +1,6 @@
 {
   "name": "@jakobgoerke/mercedes-benz-client",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "main": "./build/src",
   "types": "./build/src/index.d.ts",
   "repository": "git@github.com:jakobgoerke/mercedes-benz-client.git",
