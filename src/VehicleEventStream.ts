@@ -16,7 +16,14 @@ import {
   WS_URL,
 } from './constants';
 import { MercedesBenzClient } from './MercedesBenzClient';
-import { ClientMessage, type DecodedAttributeStatus, type DecodedPushMessage, type DecodedVEPUpdate, PushMessage } from './proto';
+import {
+  ClientMessage,
+  type DecodedAttributeStatus,
+  type DecodedPushMessage,
+  type DecodedVEPUpdate,
+  type DecodedVehicleStatusUpdate,
+  PushMessage,
+} from './proto';
 import type { AttributeValue, Position, VehicleUpdate } from './types';
 
 /**
@@ -27,6 +34,15 @@ import type { AttributeValue, Position, VehicleUpdate } from './types';
 const POSITION_LAT_KEY = 'positionLat';
 const POSITION_LONG_KEY = 'positionLong';
 const POSITION_HEADING_KEY = 'positionHeading';
+
+/**
+ * `VehicleStatusUpdate` uses its own field names, snake_case for position —
+ * distinct from the `VEPUpdate` attribute-map keys above despite describing
+ * the same values.
+ */
+const STATUS_POSITION_LAT_KEY = 'position_lat';
+const STATUS_POSITION_LONG_KEY = 'position_long';
+const STATUS_POSITION_HEADING_KEY = 'position_heading';
 
 const WS_CLOSE_CODES: Record<number, string> = {
   1000: 'normal closure',
@@ -213,6 +229,15 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
       this.sendAck('apptwin_pending_commands_response', {});
       return;
     }
+
+    if (msg.vehicle_status_updates) {
+      const { sequence_number, vehicle_status_updates } = msg.vehicle_status_updates;
+      for (const [vin, status] of Object.entries(vehicle_status_updates ?? {})) {
+        this.emitVehicleStatusUpdate(vin, status);
+      }
+      this.sendAck('acknowledge_vehicle_status_updates', { sequence_number });
+      return;
+    }
   }
 
   private emitVepUpdate(vin: string, vep: DecodedVEPUpdate): void {
@@ -248,6 +273,36 @@ export class VehicleEventStream extends (EventEmitter as new () => TypedEventEmi
     if (position) this.emit('position', vin, position);
   }
 
+  private emitVehicleStatusUpdate(vin: string, status: DecodedVehicleStatusUpdate): void {
+    const attributes = extractVehicleStatusAttributes(status);
+
+    const emittedAt = new Date();
+    const latitude = attributes[STATUS_POSITION_LAT_KEY];
+    const longitude = attributes[STATUS_POSITION_LONG_KEY];
+    const heading = attributes[STATUS_POSITION_HEADING_KEY];
+
+    let position: Position | undefined;
+    if (typeof latitude === 'number' && typeof longitude === 'number') {
+      position = {
+        latitude,
+        longitude,
+        heading: typeof heading === 'number' ? heading : undefined,
+        timestamp: emittedAt,
+      };
+    }
+
+    const update: VehicleUpdate = {
+      vin,
+      fullUpdate: Boolean(status.full_update),
+      emittedAt,
+      attributes,
+      position,
+    };
+
+    this.emit('update', update);
+    if (position) this.emit('position', vin, position);
+  }
+
   private sendAck(oneofField: string, payload: Record<string, unknown>): void {
     const msg = ClientMessage.create({ [oneofField]: payload });
     const bytes = ClientMessage.encode(msg).finish();
@@ -269,16 +324,42 @@ function extractAttributeValue(status: DecodedAttributeStatus | undefined): Attr
   const which = status.attribute_type;
   if (!which || which === 'nil_value') return null;
 
-  const value = status[which];
+  return unwrapAttributeValue(status[which]);
+}
+
+/**
+ * Unwraps a decoded protobufjs scalar/message value into `AttributeValue`.
+ * int64 fields decode to a Long-like object rather than a plain number;
+ * nested messages (schedules, histograms, tariff tables, ...) expose a
+ * `toJSON` — surface those as plain objects instead of silently discarding
+ * them. Shared by both `VEPUpdate` attributes (oneof-typed) and
+ * `VehicleStatusUpdate` attributes (one message field per attribute).
+ */
+function unwrapAttributeValue(value: unknown): AttributeValue {
   if (value === null || value === undefined) return null;
   if (typeof value !== 'object') return value as AttributeValue;
 
-  // int64 fields (e.g. int_value) decode to a Long-like object rather than
-  // a plain number; the remaining oneof cases are nested messages
-  // (schedules, histograms, tariff tables, ...) with a `toJSON` — surface
-  // those as plain objects instead of silently discarding them.
   const wrapped = value as { toNumber?: () => number; toJSON?: () => Record<string, unknown> };
   if (typeof wrapped.toNumber === 'function') return wrapped.toNumber();
   if (typeof wrapped.toJSON === 'function') return wrapped.toJSON();
   return value as Record<string, unknown>;
+}
+
+/**
+ * `VehicleStatusUpdate` has no `oneof` discriminator — each known attribute
+ * (`ignitionstate`, `odo`, `position_lat`, ...) is its own optional message
+ * field wrapping `{ value, metadata }`. protobufjs only assigns a field as
+ * an own property when it was actually present on the wire (proto3
+ * message-field presence), so `Object.keys()` here is exactly "what did the
+ * backend send this time" — confirmed against a live decode round-trip.
+ */
+function extractVehicleStatusAttributes(status: DecodedVehicleStatusUpdate): Record<string, AttributeValue> {
+  const attributes: Record<string, AttributeValue> = {};
+  for (const key of Object.keys(status)) {
+    if (key === 'fin_or_vin' || key === 'full_update') continue;
+    const field = status[key];
+    if (field === null || field === undefined || typeof field !== 'object') continue;
+    attributes[key] = unwrapAttributeValue(field.value);
+  }
+  return attributes;
 }

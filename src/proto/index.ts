@@ -62,6 +62,8 @@ export const VEPUpdate = root.lookupType('proto.VEPUpdate');
 export const VEPUpdatesByVIN = root.lookupType('proto.VEPUpdatesByVIN');
 export const VehicleAttributeStatus = root.lookupType('proto.VehicleAttributeStatus');
 export const AssignedVehicles = root.lookupType('proto.AssignedVehicles');
+export const VehicleStatusUpdates = root.lookupType('proto.VehicleStatusUpdates');
+export const VehicleStatusUpdate = root.lookupType('proto.VehicleStatusUpdate');
 
 /**
  * Shapes for the plain objects `*.decode()` returns above. protobufjs types
@@ -109,6 +111,38 @@ export interface DecodedAssignedVehicles {
   vins?: string[];
 }
 
+/**
+ * A single attribute inside a `VehicleStatusUpdate` — unlike `VEPUpdate`'s
+ * attributes (a map keyed by name, with `oneof attribute_type` picking the
+ * value's wire type), each attribute here is its own optional message field
+ * declared directly on `VehicleStatusUpdate` (e.g. `ignitionstate`,
+ * `odo`, `position_lat`) wrapping a typed `{ value, metadata }` shape.
+ * Field presence (not a discriminator) says whether it was sent.
+ */
+export interface DecodedVehicleStatusAttribute {
+  value?: unknown;
+}
+
+/**
+ * Decoded `VehicleStatusUpdate`. Only fields actually present on the wire
+ * appear as own properties (protobufjs proto3 message-field presence), so
+ * `Object.keys()` on this is exactly "what did the backend send this time" —
+ * mirrors the `attribute_type` presence check used for `DecodedVEPUpdate`.
+ * Field names are Mercedes' own (verbatim, mixed casing) and mostly — but
+ * not always — match the `VEPUpdate` attribute keys of the same concept
+ * (e.g. `ignitionstate` matches; `position_lat` vs. `positionLat` doesn't).
+ */
+export interface DecodedVehicleStatusUpdate {
+  fin_or_vin?: string;
+  full_update?: boolean;
+  [attributeField: string]: DecodedVehicleStatusAttribute | string | boolean | undefined;
+}
+
+export interface DecodedVehicleStatusUpdates {
+  sequence_number?: number | LongLike;
+  vehicle_status_updates?: Record<string, DecodedVehicleStatusUpdate>;
+}
+
 interface DecodedSequencedAck {
   sequence_number?: number | LongLike;
 }
@@ -121,4 +155,5 @@ export interface DecodedPushMessage {
   apptwin_command_status_updates_by_vin?: DecodedSequencedAck;
   service_status_updates?: DecodedSequencedAck;
   apptwin_pending_command_request?: unknown;
+  vehicle_status_updates?: DecodedVehicleStatusUpdates;
 }
