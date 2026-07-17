@@ -1,3 +1,36 @@
+import type {
+  ChargeCouplerLockStatus,
+  ChargeCouplerStatus,
+  ChargeFlapStatus,
+  ChargingErrorDetails,
+  ChargingStatus,
+  DepartureTimeMode,
+  DoorLockStatusVehicle,
+  DoorStatusOverall,
+  FilterParticleLoading,
+  HvBatteryThermalPropagationEvent,
+  HybridWarnings,
+  IgnitionState,
+  LanguageHU,
+  RooftopStatus,
+  SelectedChargeProgram,
+  StarterBatteryState,
+  SunroofEvent,
+  SunroofStatus,
+  SunroofStatusBlind,
+  TcuConnectionStateLowChannel,
+  TireMarker,
+  TireSensorAvailable,
+  TireWarningLamp,
+  TireWarningLevelPrw,
+  TireWarningsRdk,
+  VehicleHealthStatus,
+  VehiclePositionErrorCode,
+  WindowStatus,
+  WindowStatusBlind,
+  WindowStatusOverall,
+} from './enums';
+
 export interface Position {
   latitude: number;
   longitude: number;
@@ -29,16 +62,16 @@ export interface PositionAttributes {
   positionLat: number | null;
   positionLong: number | null;
   positionHeading: number | null;
-  vehiclePositionErrorCode: number | null;
+  vehiclePositionErrorCode: VehiclePositionErrorCode | null;
   /** 1 = proximity calculation required before showing position */
   proximityCalculationForVehiclePositionRequired: number | null;
   trackingStateHU: number | null;
 }
 
 export interface IgnitionAttributes {
-  ignitionstate: number | null;
+  ignitionstate: IgnitionState | null;
   parkbrakestatus: number | null;
-  starterBatteryState: number | null;
+  starterBatteryState: StarterBatteryState | null;
   vtime: number | null;
 }
 
@@ -48,7 +81,7 @@ export interface DoorAttributes {
   doorstatusrearleft: number | null;
   doorstatusrearright: number | null;
   /** Aggregate door open/close status */
-  doorStatusOverall: number | null;
+  doorStatusOverall: DoorStatusOverall | null;
   decklidstatus: number | null;
   engineHoodStatus: number | null;
   /** true = unlocked, false = locked (per-door actuator state; observed from live data) */
@@ -57,30 +90,30 @@ export interface DoorAttributes {
   doorlockstatusrearleft: boolean | null;
   doorlockstatusrearright: boolean | null;
   doorlockstatusdecklid: boolean | null;
-  /** Aggregate lock state enum (0 = unlocked, 2 = locked observed; other values unconfirmed) */
-  doorlockstatusvehicle: number | null;
+  /** Aggregate lock state enum */
+  doorlockstatusvehicle: DoorLockStatusVehicle | null;
   doorlockstatusgas: boolean | null;
 }
 
 export interface WindowAttributes {
-  windowstatusfrontleft: number | null;
-  windowstatusfrontright: number | null;
-  windowstatusrearleft: number | null;
-  windowstatusrearright: number | null;
-  windowStatusOverall: number | null;
-  windowStatusRearBlind: number | null;
-  windowStatusRearLeftBlind: number | null;
-  windowStatusRearRightBlind: number | null;
+  windowstatusfrontleft: WindowStatus | null;
+  windowstatusfrontright: WindowStatus | null;
+  windowstatusrearleft: WindowStatus | null;
+  windowstatusrearright: WindowStatus | null;
+  windowStatusOverall: WindowStatusOverall | null;
+  windowStatusRearBlind: WindowStatusBlind | null;
+  windowStatusRearLeftBlind: WindowStatusBlind | null;
+  windowStatusRearRightBlind: WindowStatusBlind | null;
   flipWindowStatus: number | null;
 }
 
 export interface SunroofAttributes {
-  sunroofstatus: number | null;
-  sunroofStatusFrontBlind: number | null;
-  sunroofStatusRearBlind: number | null;
-  sunroofEvent: number | null;
+  sunroofstatus: SunroofStatus | null;
+  sunroofStatusFrontBlind: SunroofStatusBlind | null;
+  sunroofStatusRearBlind: SunroofStatusBlind | null;
+  sunroofEvent: SunroofEvent | null;
   sunroofEventActive: number | null;
-  rooftopstatus: number | null;
+  rooftopstatus: RooftopStatus | null;
 }
 
 export interface ElectricRangeAttributes {
@@ -109,21 +142,21 @@ export interface ElectricRangeAttributes {
   drivenTimeZEReset: number | null;
   evRangeAssistDriveOnSOC: number | null;
   evRangeAssistDriveOnTime: number | null;
-  hvBatteryThermalPropagationEvent: number | null;
+  hvBatteryThermalPropagationEvent: HvBatteryThermalPropagationEvent | null;
 }
 
 export interface ChargingAttributes {
   chargingactive: number | null;
-  chargingstatus: number | null;
+  chargingstatus: ChargingStatus | null;
   chargingPower: number | null;
   chargingPowerEcoLimit: number | null;
-  chargingErrorDetails: number | null;
-  chargeCouplerACStatus: number | null;
-  chargeCouplerDCStatus: number | null;
-  chargeCouplerDCLockStatus: number | null;
-  chargeFlapDCStatus: number | null;
+  chargingErrorDetails: ChargingErrorDetails | null;
+  chargeCouplerACStatus: ChargeCouplerStatus | null;
+  chargeCouplerDCStatus: ChargeCouplerStatus | null;
+  chargeCouplerDCLockStatus: ChargeCouplerLockStatus | null;
+  chargeFlapDCStatus: ChargeFlapStatus | null;
   chargePrograms: number | null;
-  selectedChargeProgram: number | null;
+  selectedChargeProgram: SelectedChargeProgram | null;
   smartCharging: number | null;
   bidirectionalChargingActive: number | null;
   endofchargetime: number | null;
@@ -147,8 +180,8 @@ export interface FuelAttributes {
   liquidconsumptionreset: number | null;
   distanceGasStart: number | null;
   distanceGasReset: number | null;
-  filterParticleLoading: number | null;
-  hybridWarnings: number | null;
+  filterParticleLoading: FilterParticleLoading | null;
+  hybridWarnings: HybridWarnings | null;
 }
 
 export interface TireAttributes {
@@ -159,18 +192,18 @@ export interface TireAttributes {
   tirePressureInnerRearLeft: number | null;
   tirePressureInnerRearRight: number | null;
   tirePressMeasTimestamp: number | null;
-  tireMarkerFrontLeft: number | null;
-  tireMarkerFrontRight: number | null;
-  tireMarkerRearLeft: number | null;
-  tireMarkerRearRight: number | null;
-  tireMarkerInnerRearLeft: number | null;
-  tireMarkerInnerRearRight: number | null;
-  tiremarker: number | null;
-  tirewarninglamp: number | null;
-  tirewarningsrdk: number | null;
+  tireMarkerFrontLeft: TireMarker | null;
+  tireMarkerFrontRight: TireMarker | null;
+  tireMarkerRearLeft: TireMarker | null;
+  tireMarkerRearRight: TireMarker | null;
+  tireMarkerInnerRearLeft: TireMarker | null;
+  tireMarkerInnerRearRight: TireMarker | null;
+  tiremarker: TireMarker | null;
+  tirewarninglamp: TireWarningLamp | null;
+  tirewarningsrdk: TireWarningsRdk | null;
   tirewarningsprw: number | null;
-  tireWarningLevelPrw: number | null;
-  tireSensorAvailable: number | null;
+  tireWarningLevelPrw: TireWarningLevelPrw | null;
+  tireSensorAvailable: TireSensorAvailable | null;
 }
 
 export interface TripAttributes {
@@ -202,7 +235,7 @@ export interface PreconditioningAttributes {
 export interface DepartureTimerAttributes {
   departuretime: number | null;
   departuretimesoc: number | null;
-  departureTimeMode: number | null;
+  departureTimeMode: DepartureTimeMode | null;
   departureTimeWeekday: number | null;
   weeklySetHU: number | null;
   weeklyProfile: number | null;
@@ -214,7 +247,7 @@ export interface WarningAttributes {
   warningbrakeliningwear: number | null;
   warningcoolantlevellow: number | null;
   warningenginelight: number | null;
-  vehicleHealthStatus: number | null;
+  vehicleHealthStatus: VehicleHealthStatus | null;
 }
 
 export interface EcoScoreAttributes {
@@ -232,12 +265,12 @@ export interface ServiceAttributes {
 
 /** Head-unit / connectivity attributes. */
 export interface SystemAttributes {
-  languageHU: number | null;
+  languageHU: LanguageHU | null;
   timeFormatHU: number | null;
   temperatureUnitHU: number | null;
   temperaturePoints: number | null;
   speedUnitFromIC: number | null;
-  tcuConnectionStateLowChannel: number | null;
+  tcuConnectionStateLowChannel: TcuConnectionStateLowChannel | null;
   vehicleDataConnectionState: number | null;
 }
 
