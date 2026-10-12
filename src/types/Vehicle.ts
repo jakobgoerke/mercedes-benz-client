@@ -23,8 +23,11 @@ export const VehicleSchema = z
   .transform((v) => ({
     vin: v.vin,
     fin: v.fin ?? v.vin,
-    licensePlate: v.licensePlate,
-    model: v.salesRelatedInformation?.model?.modelDescription,
+    // The API sends an empty string when no plate is registered in the app.
+    licensePlate: v.licensePlate?.trim() || undefined,
+    // `model.modelDescription` is often absent; the baumuster description
+    // (e.g. "EQA 250+") is what the Mercedes app itself shows.
+    model: v.salesRelatedInformation?.model?.modelDescription || v.salesRelatedInformation?.baumuster?.baumusterDescription,
     modelYear: v.salesRelatedInformation?.model?.modelYear,
   }));
 
