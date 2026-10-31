@@ -52,14 +52,7 @@ export class MercedesBenzClient {
     this.deviceId = options.deviceId ?? randomUUID();
     this.token = options.token;
 
-    this.jar = new CookieJar();
-    // CIAM.DEVICE identifies the device to the login backend across the 6-step
-    // OAuth dance. mbapi2020 seeds this into the jar up-front — the CIAM
-    // endpoints reject requests that don't carry it.
-    this.jar.setCookieSync(
-      new Cookie({ key: 'CIAM.DEVICE', value: this.deviceId, domain: 'id.mercedes-benz.com', path: '/' }),
-      LOGIN_BASE_URL,
-    );
+    this.jar = createDeviceJar(this.deviceId);
 
     this.rest = makeJarClient(this.jar, { baseURL: REST_BASE_URL, timeout: 10_000, headers: this.apiHeaders() });
     this.rest.interceptors.request.use(async (config) => {
@@ -79,7 +72,10 @@ export class MercedesBenzClient {
     const codeVerifier = randomBytes(32).toString('base64url');
     const codeChallenge = createHash('sha256').update(codeVerifier).digest().toString('base64url');
 
-    const authClient = makeJarClient(this.jar, { timeout: 10_000 });
+    // A fresh jar per login: cookies from an earlier login keep a live SSO
+    // session, so the authorization step would skip the login form and
+    // redirect straight to rismycar:// — which the flow can't follow.
+    const authClient = makeJarClient(createDeviceJar(this.deviceId), { timeout: 10_000 });
 
     try {
       const resumePath = await this.getAuthorizationResume(authClient, codeChallenge);
@@ -303,6 +299,17 @@ export class MercedesBenzClient {
       'Ris-Os-Version': OS_VERSION,
     };
   }
+}
+
+/**
+ * CIAM.DEVICE identifies the device to the login backend across the 6-step
+ * OAuth dance. mbapi2020 seeds this into the jar up-front — the CIAM
+ * endpoints reject requests that don't carry it.
+ */
+function createDeviceJar(deviceId: string): CookieJar {
+  const jar = new CookieJar();
+  jar.setCookieSync(new Cookie({ key: 'CIAM.DEVICE', value: deviceId, domain: 'id.mercedes-benz.com', path: '/' }), LOGIN_BASE_URL);
+  return jar;
 }
 
 /**
